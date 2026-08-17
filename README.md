@@ -48,12 +48,15 @@ Secrets, WireGuard private keys, certificates, and `.env` are never committed.
 Deployment uploads the private repository contents over SSH. The server does
 not need a GitHub token or deploy key.
 
-The production SSH user is `ubuntu`. Its password is locked and its
-`authorized_keys` contains separate administrator and GitHub Actions keys. It
-is a member of the `docker` group but has no `sudo` access. Docker membership is
-root-equivalent and must remain limited to these reviewed keys. Systemd units
-are installed once by an administrator; CI verifies their contents before each
-deployment and fails closed if the checked-in definitions differ.
+Production access is split between two locked-password accounts. `ubuntu`
+accepts only the administrator key and has passwordless sudo for host
+maintenance. `deploy` accepts only the GitHub Actions key, belongs to the
+`docker` group, and has no sudo access. Docker membership is root-equivalent
+and must remain limited to the reviewed CI key. Direct root login, SSH password
+authentication, keyboard-interactive authentication, and X11 forwarding are
+disabled. Systemd units are installed once by an administrator; CI verifies
+their contents before each deployment and fails closed if the checked-in
+definitions differ.
 
 ## Local validation
 
