@@ -62,7 +62,7 @@ jobs:
             --exclude '.git' \
             --exclude 'data' \
             -e 'ssh -i ~/.ssh/id_ed25519 -o BatchMode=yes' \
-            ./ "$RELAY_SERVER_USER@$RELAY_SERVER_HOST:/tmp/telescan-relay-release/"
+            ./ "$RELAY_SERVER_USER@$RELAY_SERVER_HOST:/opt/telescan-relay/"
 
       - name: Deploy relay
         env:
@@ -72,25 +72,19 @@ jobs:
           ssh -i ~/.ssh/id_ed25519 -o BatchMode=yes \
             "$RELAY_SERVER_USER@$RELAY_SERVER_HOST" <<'REMOTE'
           set -Eeuo pipefail
-          sudo install -d -m 0755 /opt/telescan-relay
-          sudo rsync -a --delete \
-            --exclude '.env' \
-            /tmp/telescan-relay-release/ /opt/telescan-relay/
-          sudo chown -R root:root /opt/telescan-relay
           cd /opt/telescan-relay
 
           test -s .env
-          sudo install -m 0644 \
+          test "$(stat -c '%a' .env)" = "600"
+          cmp --silent \
             ops/systemd/telescan-relay-certbot-renew.service \
             /etc/systemd/system/telescan-relay-certbot-renew.service
-          sudo install -m 0644 \
+          cmp --silent \
             ops/systemd/telescan-relay-certbot-renew.timer \
             /etc/systemd/system/telescan-relay-certbot-renew.timer
-          sudo systemctl daemon-reload
-          sudo systemctl enable --now telescan-relay-certbot-renew.timer
 
           docker compose config --quiet </dev/null
           docker compose up -d --build --no-deps relay </dev/null
           bash ops/check-relay.sh
-          sudo systemctl is-active --quiet telescan-relay-certbot-renew.timer
+          systemctl is-active --quiet telescan-relay-certbot-renew.timer
           REMOTE
