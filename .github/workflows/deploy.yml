@@ -1,0 +1,96 @@
+name: Validate and deploy EU relay
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: telescan-relay-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Validate configuration
+        run: |
+          docker compose config --quiet
+          find ops -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+
+      - name: Build relay image
+        run: docker compose build relay
+
+  deploy:
+    name: Deploy to EU production
+    if: github.event_name != 'pull_request' && vars.DEPLOY_ENABLED == 'true'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.RELAY_SERVER_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.RELAY_SERVER_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Upload release
+        env:
+          RELAY_SERVER_HOST: ${{ secrets.RELAY_SERVER_HOST }}
+          RELAY_SERVER_USER: ${{ secrets.RELAY_SERVER_USER }}
+        run: |
+          rsync -az --delete \
+            --exclude '.env' \
+            --exclude '.git' \
+            --exclude 'data' \
+            -e 'ssh -i ~/.ssh/id_ed25519 -o BatchMode=yes' \
+            ./ "$RELAY_SERVER_USER@$RELAY_SERVER_HOST:/tmp/telescan-relay-release/"
+
+      - name: Deploy relay
+        env:
+          RELAY_SERVER_HOST: ${{ secrets.RELAY_SERVER_HOST }}
+          RELAY_SERVER_USER: ${{ secrets.RELAY_SERVER_USER }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o BatchMode=yes \
+            "$RELAY_SERVER_USER@$RELAY_SERVER_HOST" <<'REMOTE'
+          set -Eeuo pipefail
+          sudo install -d -m 0755 /opt/telescan-relay
+          sudo rsync -a --delete \
+            --exclude '.env' \
+            /tmp/telescan-relay-release/ /opt/telescan-relay/
+          sudo chown -R root:root /opt/telescan-relay
+          cd /opt/telescan-relay
+
+          test -s .env
+          sudo install -m 0644 \
+            ops/systemd/telescan-relay-certbot-renew.service \
+            /etc/systemd/system/telescan-relay-certbot-renew.service
+          sudo install -m 0644 \
+            ops/systemd/telescan-relay-certbot-renew.timer \
+            /etc/systemd/system/telescan-relay-certbot-renew.timer
+          sudo systemctl daemon-reload
+          sudo systemctl enable --now telescan-relay-certbot-renew.timer
+
+          docker compose config --quiet </dev/null
+          docker compose up -d --build --no-deps relay </dev/null
+          bash ops/check-relay.sh
+          sudo systemctl is-active --quiet telescan-relay-certbot-renew.timer
+          REMOTE

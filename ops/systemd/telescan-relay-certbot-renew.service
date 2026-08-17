@@ -1,0 +1,11 @@
+[Unit]
+Description=Renew Telescan EU relay TLS certificate
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/telescan-relay
+ExecStart=/usr/bin/docker compose --profile certificate run --rm certbot renew --webroot --webroot-path /var/www/certbot --quiet
+ExecStartPost=/usr/bin/docker compose exec -T relay nginx -s reload
