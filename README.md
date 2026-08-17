@@ -29,7 +29,7 @@ Secrets, WireGuard private keys, certificates, and `.env` are never committed.
 
 1. Install host packages with `sudo bash ops/install-host-dependencies.sh`.
 2. Configure WireGuard between EU and Moscow and verify
-   `curl http://10.77.0.1:8081/health` from the EU host.
+   `curl http://10.77.0.1:8081/health/origin` from the EU host.
 3. Copy the repository to `/opt/telescan-relay` and create `.env` from
    `.env.example` with the certificate contact email.
 4. Point the `A` record for `api.tgtelescan.ru` to `212.69.87.142`.
