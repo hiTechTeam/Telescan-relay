@@ -3,7 +3,7 @@
 Private edge relay for `api.tgtelescan.ru`. The relay terminates HTTPS in the
 Netherlands and forwards API traffic to the Moscow origin through WireGuard.
 The production relay, DNS route, certificate-renewal timer, and deployment
-workflow are active as of August 17, 2026.
+workflow are active.
 
 ## Network model
 
@@ -103,8 +103,8 @@ is running. A tunnel whose final target is `ubuntu@212.69.87.142` will return
 ## Certificate renewal
 
 The systemd timer runs Certbot twice daily. The ACME challenge uses port 80 and
-reloads nginx only after a successful renewal. A Certbot dry run and the active,
-enabled timer state were verified on August 17, 2026.
+reloads nginx only after a successful renewal. Deployment verifies the active
+and enabled timer state.
 
 ## Repository workflow
 
@@ -113,12 +113,6 @@ successful push to `main` uploads the release with rsync, preserves host secrets
 verifies the installed systemd definitions, rebuilds the relay, runs
 `ops/check-relay.sh`, and verifies the renewal timer. Production deployment is
 gated by `DEPLOY_ENABLED=true` and serialized per branch.
-
-This repository is private. The current GitHub plan does not enforce branch
-protection/rulesets or provide secret scanning and push protection for private
-repositories. Dependabot vulnerability alerts and security updates are enabled;
-pull-request review and the green `Validate and build` job remain procedural
-merge gates. Do not force-push or delete `main`.
 
 Cross-service production topology, recovery order, and security boundaries are
 maintained in the private
