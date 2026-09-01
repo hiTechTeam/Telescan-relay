@@ -63,9 +63,12 @@ install -m 0644 "$source_path_unit" "$path_destination"
 install -m 0644 "$source_certbot_service" "$certbot_service_destination"
 install -m 0644 "$source_certbot_timer" "$certbot_timer_destination"
 systemctl daemon-reload
-systemctl reset-failed \
-  telescan-relay-release-recovery.service \
-  telescan-relay-release-recovery.path
+for unit in telescan-relay-release-recovery.service \
+    telescan-relay-release-recovery.path; do
+  if systemctl is-failed --quiet "$unit"; then
+    systemctl reset-failed "$unit"
+  fi
+done
 systemctl enable telescan-relay-release-recovery.service
 systemctl enable --now telescan-relay-release-recovery.path
 systemctl enable --now telescan-relay-certbot-renew.timer
