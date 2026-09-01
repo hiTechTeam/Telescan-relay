@@ -15,6 +15,7 @@ expect_rejected() {
 expect_rejected deploy bash ops/deploy-with-rollback.sh
 expect_rejected release-supervisor bash ops/run-release-transaction.sh
 expect_rejected release-recovery-install bash ops/install-release-recovery.sh
+grep -q 'systemctl reset-failed' ops/install-release-recovery.sh
 expect_rejected ssh-apply bash ops/install-host-hardening.sh
 expect_rejected relay-check-argument bash ops/check-relay.sh --unexpected
 grep -q '^  group: telescan-relay-production$' .github/workflows/deploy.yml
