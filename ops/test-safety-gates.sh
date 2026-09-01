@@ -26,15 +26,15 @@ grep -q 'test-release-transaction.sh' .github/workflows/deploy.yml
 grep -q 'tar --extract --gzip --file=- --directory "$release_root"' \
   .github/workflows/deploy.yml
 grep -q -- '--active-root /opt/telescan-relay' .github/workflows/deploy.yml
-if rg -q 'Upload release|\brsync\b' .github/workflows/deploy.yml; then
+if grep -Eq 'Upload release|rsync' .github/workflows/deploy.yml; then
   echo "Relay workflow still mutates the active release outside its transaction." >&2
   exit 1
 fi
-lock_line="$(rg -n 'flock --exclusive --timeout 1800 9' \
+lock_line="$(grep -n 'flock --exclusive --timeout 1800 9' \
   .github/workflows/deploy.yml | cut -d: -f1)"
-extract_line="$(rg -n 'tar --extract --gzip --file=- --directory' \
+extract_line="$(grep -n 'tar --extract --gzip --file=- --directory' \
   .github/workflows/deploy.yml | cut -d: -f1)"
-transaction_line="$(rg -n '"\$release_root/ops/run-release-transaction.sh"' \
+transaction_line="$(grep -n '"\$release_root/ops/run-release-transaction.sh"' \
   .github/workflows/deploy.yml | cut -d: -f1)"
 if [[ ! "$lock_line" =~ ^[0-9]+$ || ! "$extract_line" =~ ^[0-9]+$ || \
       ! "$transaction_line" =~ ^[0-9]+$ || \
@@ -42,7 +42,7 @@ if [[ ! "$lock_line" =~ ^[0-9]+$ || ! "$extract_line" =~ ^[0-9]+$ || \
   echo "Relay lock must precede staging extraction and release transaction." >&2
   exit 1
 fi
-if rg -q 'docker compose images[[:space:]]+-q' ops .github docker-compose.yml; then
+if grep -Erq 'docker compose images[[:space:]]+-q' ops .github docker-compose.yml; then
   echo "Unsafe running-container image discovery remains in relay deployment files." >&2
   exit 1
 fi
