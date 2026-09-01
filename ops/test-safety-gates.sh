@@ -23,6 +23,8 @@ grep -q "github.ref == 'refs/heads/main'" .github/workflows/deploy.yml
 grep -q "github.event_name == 'push'" .github/workflows/deploy.yml
 grep -q "github.event_name == 'workflow_dispatch'" .github/workflows/deploy.yml
 grep -q 'flock --exclusive --timeout 1800 9' .github/workflows/deploy.yml
+grep -q "stat -c '%U:%G:%a'" .github/workflows/deploy.yml
+grep -q 'root:root:644' .github/workflows/deploy.yml
 grep -q 'test-release-transaction.sh' .github/workflows/deploy.yml
 grep -q 'tar --extract --gzip --file=- --directory "$release_root"' \
   .github/workflows/deploy.yml
