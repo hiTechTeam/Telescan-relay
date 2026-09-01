@@ -11,6 +11,7 @@ fi
 "${sudo_cmd[@]}" apt-get install -y \
   ca-certificates \
   curl \
+  dnsutils \
   docker.io \
   docker-compose-v2 \
   fail2ban \

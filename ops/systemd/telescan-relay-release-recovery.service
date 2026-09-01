@@ -1,0 +1,15 @@
+[Unit]
+Description=Recover an interrupted Telescan relay release before dependent jobs
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+Before=telescan-relay-certbot-renew.service
+
+[Service]
+Type=oneshot
+ExecCondition=/usr/bin/test -e /opt/telescan-relay/.release-state/intent.json
+ExecStart=/bin/bash -c 'set -Eeuo pipefail; exec 9>/tmp/telescan-production-deploy.lock; flock --exclusive --timeout 1800 9; exec /opt/telescan-relay/.release-state/recovery-controller/ops/run-release-transaction.sh --apply --confirm RECOVER_RELAY_RELEASE --active-root /opt/telescan-relay --recover-only'
+TimeoutStartSec=50min
+
+[Install]
+WantedBy=multi-user.target

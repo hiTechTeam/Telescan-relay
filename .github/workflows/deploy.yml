@@ -8,8 +8,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: telescan-relay-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: telescan-relay-production
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -23,20 +23,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Validate configuration
-        run: |
-          docker compose config --quiet
-          find ops -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+      - name: Test release transaction
+        run: bash ops/test-release-transaction.sh
 
-      - name: Build relay image
-        run: docker compose build relay
+      - name: Validate configuration
+        run: bash ops/preflight.sh
 
   deploy:
     name: Deploy to EU production
-    if: github.event_name != 'pull_request' && vars.DEPLOY_ENABLED == 'true'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      vars.DEPLOY_ENABLED == 'true'
     needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 55
     environment: production
     steps:
       - name: Checkout
@@ -52,39 +53,59 @@ jobs:
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
 
-      - name: Upload release
+      - name: Upload, deploy, and verify under the production lock
         env:
           RELAY_SERVER_HOST: ${{ secrets.RELAY_SERVER_HOST }}
           RELAY_SERVER_USER: ${{ secrets.RELAY_SERVER_USER }}
         run: |
-          rsync -az --delete \
-            --exclude '.env' \
-            --exclude '.git' \
-            --exclude 'data' \
-            -e 'ssh -i ~/.ssh/id_ed25519 -o BatchMode=yes' \
-            ./ "$RELAY_SERVER_USER@$RELAY_SERVER_HOST:/opt/telescan-relay/"
-
-      - name: Deploy relay
-        env:
-          RELAY_SERVER_HOST: ${{ secrets.RELAY_SERVER_HOST }}
-          RELAY_SERVER_USER: ${{ secrets.RELAY_SERVER_USER }}
-        run: |
-          ssh -i ~/.ssh/id_ed25519 -o BatchMode=yes \
-            "$RELAY_SERVER_USER@$RELAY_SERVER_HOST" <<'REMOTE'
           set -Eeuo pipefail
-          cd /opt/telescan-relay
+          tar \
+            --exclude='.git' \
+            --exclude='.env' \
+            --exclude='.DS_Store' \
+            --exclude='._*' \
+            --exclude='data' \
+            --create --gzip --file=- . | \
+            ssh \
+              -o BatchMode=yes \
+              -o IdentitiesOnly=yes \
+              -i ~/.ssh/id_ed25519 \
+              "$RELAY_SERVER_USER@$RELAY_SERVER_HOST" '
+                set -Eeuo pipefail
+                command -v flock >/dev/null
+                exec 9>/tmp/telescan-production-deploy.lock
+                flock --exclusive --timeout 1800 9
+                release_root="$(mktemp -d /tmp/telescan-relay-release.XXXXXX)"
+                trap '\''rm -r -- "$release_root"'\'' EXIT
+                tar --extract --gzip --file=- --directory "$release_root"
+                chmod +x "$release_root"/ops/*.sh
 
-          test -s .env
-          test "$(stat -c '%a' .env)" = "600"
-          cmp --silent \
-            ops/systemd/telescan-relay-certbot-renew.service \
-            /etc/systemd/system/telescan-relay-certbot-renew.service
-          cmp --silent \
-            ops/systemd/telescan-relay-certbot-renew.timer \
-            /etc/systemd/system/telescan-relay-certbot-renew.timer
+                cmp --silent \
+                  "$release_root/ops/systemd/telescan-relay-certbot-renew.service" \
+                  /etc/systemd/system/telescan-relay-certbot-renew.service
+                cmp --silent \
+                  "$release_root/ops/systemd/telescan-relay-certbot-renew.timer" \
+                  /etc/systemd/system/telescan-relay-certbot-renew.timer
+                cmp --silent \
+                  "$release_root/ops/systemd/telescan-relay-release-recovery.service" \
+                  /etc/systemd/system/telescan-relay-release-recovery.service
+                cmp --silent \
+                  "$release_root/ops/systemd/telescan-relay-release-recovery.path" \
+                  /etc/systemd/system/telescan-relay-release-recovery.path
+                cmp --silent \
+                  "$release_root/ops/ssh/00-telescan-hardening.conf" \
+                  /etc/ssh/sshd_config.d/00-telescan-hardening.conf
+                bash "$release_root/ops/check-ssh-policy.sh"
+                systemctl is-enabled --quiet telescan-relay-certbot-renew.timer
+                systemctl is-active --quiet telescan-relay-certbot-renew.timer
+                systemctl is-enabled --quiet telescan-relay-release-recovery.service
+                systemctl is-enabled --quiet telescan-relay-release-recovery.path
+                systemctl is-active --quiet telescan-relay-release-recovery.path
 
-          docker compose config --quiet </dev/null
-          docker compose up -d --build --no-deps relay </dev/null
-          bash ops/check-relay.sh
-          systemctl is-active --quiet telescan-relay-certbot-renew.timer
-          REMOTE
+                "$release_root/ops/run-release-transaction.sh" \
+                  --apply --confirm DEPLOY_RELAY_WITH_ROLLBACK \
+                  --active-root /opt/telescan-relay \
+                  --release-root "$release_root"
+                systemctl is-enabled --quiet telescan-relay-certbot-renew.timer
+                systemctl is-active --quiet telescan-relay-certbot-renew.timer
+              '

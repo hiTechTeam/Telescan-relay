@@ -1,5 +1,8 @@
+name: telescan-relay
+
 services:
   relay:
+    image: telescan-relay:release
     build:
       context: .
       dockerfile: Dockerfile

@@ -6,6 +6,6 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-WorkingDirectory=/opt/telescan-relay
+WorkingDirectory=/opt/telescan-relay/current
 ExecStart=/usr/bin/docker compose --profile certificate run --rm certbot renew --webroot --webroot-path /var/www/certbot --quiet
 ExecStartPost=/usr/bin/docker compose exec -T relay nginx -s reload

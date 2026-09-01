@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for interrupted Telescan relay release intent
+
+[Path]
+PathExists=/opt/telescan-relay/.release-state/intent.json
+Unit=telescan-relay-release-recovery.service
+
+[Install]
+WantedBy=multi-user.target

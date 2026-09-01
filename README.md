@@ -34,14 +34,17 @@ Secrets, WireGuard private keys, certificates, and `.env` are never committed.
 ## Provisioning or recovery
 
 1. Install host packages with `sudo bash ops/install-host-dependencies.sh`.
-2. Configure WireGuard between EU and Moscow and verify
+2. From the provider console, apply and verify the interactive SSH baseline as
+   documented in `RUNBOOK.md`, then prove a separate key login.
+3. Configure WireGuard between EU and Moscow and verify
    `curl http://10.77.0.1:8081/health/origin` from the EU host.
-3. Copy the repository to `/opt/telescan-relay` and create `.env` from
+4. Copy the repository to `/opt/telescan-relay` and create `.env` from
    `.env.example` with the certificate contact email.
-4. Point the `A` record for `api.tgtelescan.ru` to `212.69.87.142`.
-5. Run `sudo bash ops/bootstrap-certificate.sh` from `/opt/telescan-relay`.
-6. Install and enable the renewal timer from `ops/systemd/`.
-7. Add GitHub production secrets and set repository variable
+5. Point the `A` record for `api.tgtelescan.ru` to `212.69.87.142`.
+6. Run `sudo bash ops/bootstrap-certificate.sh` from `/opt/telescan-relay`.
+7. Run the guarded release-runtime installer from `RUNBOOK.md`; it installs
+   the renewal timer and durable online recovery watcher together.
+8. Add GitHub production secrets and set repository variable
    `DEPLOY_ENABLED=true` only after the first healthy deployment.
 
 These steps are for a replacement host or disaster recovery; the current host
@@ -78,10 +81,16 @@ multi-platform digests.
 ## Local validation
 
 ```sh
-docker compose config --quiet
-docker compose build relay
-bash -n ops/*.sh
+bash ops/preflight.sh
 ```
+
+The preflight includes a live semantic route check against the built image.
+Production writes a durable old/new release intent, protects the previous image
+under a unique rollback tag, and switches one atomic `current` pointer. It rolls
+back automatically if local relay, Moscow origin, or normal public-ready
+verification fails. The online path watcher also recovers an interrupted outer
+SSH session. Operational details and the interactive-only SSH hardening guard
+are in `RUNBOOK.md`.
 
 ## Administrative Swagger tunnel
 
@@ -108,11 +117,15 @@ and enabled timer state.
 
 ## Repository workflow
 
-Pull requests validate Compose, shell syntax, and the pinned relay image. A
-successful push to `main` uploads the release with rsync, preserves host secrets,
-verifies the installed systemd definitions, rebuilds the relay, runs
-`ops/check-relay.sh`, and verifies the renewal timer. Production deployment is
-gated by `DEPLOY_ENABLED=true` and serialized per branch.
+Pull requests validate Compose, shell syntax, and live semantics of the pinned
+relay image. A
+successful push to `main` streams the release into immutable staging only after
+the remote production lock is held, preserves the host-owned `.env`, verifies
+the installed systemd definitions, creates and fsyncs an immutable release,
+rebuilds the relay, and runs end-to-end health checks. Candidate containers use
+`restart: no` until a durable commit. A failed or interrupted rollout restores
+the previous `current` pointer and protected image. Production deployment is
+gated by `DEPLOY_ENABLED=true` and serialized behind one production lock.
 
 Cross-service production topology, recovery order, and security boundaries are
 maintained in the private
