@@ -97,9 +97,18 @@ write_executable "$mock_bin/docker" \
   '    "$release_ref") cat "$TRANSACTION_IMAGE_STATE" ;;' \
   '    "$old_ref") cat "$TRANSACTION_OLD_REF_STATE" ;;' \
   '    telescan-relay:rollback-*) cat "$TRANSACTION_ROLLBACK_STATE" ;;' \
-  '    sha256:*) echo "$target" ;;' \
+  '    sha256:*)' \
+  '      if [[ "$target" == "$old_id" && "${TRANSACTION_OLD_IMAGE_MISSING:-0}" == 1 ]]; then exit 1; fi' \
+  '      echo "$target"' \
+  '      ;;' \
   '    *) exit 1 ;;' \
   '  esac' \
+  'elif [[ "$1 $2" == "container commit" ]]; then' \
+  '  [[ "$3" == --pause=true && "$4" == container-relay && "$5" == telescan-relay:rollback-* ]]' \
+  '  materialized_id=sha256:5555555555555555555555555555555555555555555555555555555555555555' \
+  '  printf "%s\n" "$materialized_id" >"$TRANSACTION_ROLLBACK_STATE"' \
+  '  echo legacy-image-materialized >>"$TRANSACTION_TEST_LOG"' \
+  '  echo "$materialized_id"' \
   'elif [[ "$1 $2" == "image tag" ]]; then' \
   '  source_id="$3"; target_ref="$4"' \
   '  if [[ "$source_id" == telescan-relay:rollback-* ]]; then source_id="$(cat "$TRANSACTION_ROLLBACK_STATE")"; fi' \
@@ -164,6 +173,7 @@ invoke() (
   TRANSACTION_IMAGE_STATE="$image_state" \
   TRANSACTION_OLD_REF_STATE="$old_ref_state" \
   TRANSACTION_ROLLBACK_STATE="$rollback_state" \
+  TRANSACTION_OLD_IMAGE_MISSING="${TRANSACTION_OLD_IMAGE_MISSING:-0}" \
   TELESCAN_RELAY_TRANSACTION_TEST_MODE=1 \
   TELESCAN_RELAY_TRANSACTION_TEST_ROOT="$test_root" \
   TELESCAN_RELAY_TRANSACTION_KILLPOINT="${1:-}" \
@@ -239,6 +249,12 @@ run_expect 0
 [[ "$(cat "$active_root/.env")" == runtime-only ]]
 [[ -L "$active_root/current/.env" ]]
 [[ ! -e "$active_root/.release-state/intent.json" ]]
+
+prepare_case 0
+TRANSACTION_OLD_IMAGE_MISSING=1 run_expect 0
+[[ "$(cat "$active_root/current/version.txt")" == new ]]
+[[ ! -e "$active_root/.release-state/intent.json" ]]
+grep -q '^legacy-image-materialized$' "$test_log"
 
 for killpoint in after-intent before-pointer after-pointer after-recreate; do
   prepare_case 0

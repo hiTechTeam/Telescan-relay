@@ -262,7 +262,17 @@ chmod +x "$new_release"/ops/*.sh
 ln -s ../../.env "$new_release/.env"
 sync_release "$new_release"
 
-docker image tag "$previous_image_id" "$rollback_image_reference"
+if docker image inspect --format '{{.Id}}' "$previous_image_id" >/dev/null 2>&1; then
+  docker image tag "$previous_image_id" "$rollback_image_reference"
+else
+  echo "The running legacy Relay image metadata is missing; materializing a rollback image from the paused container."
+  docker container commit --pause=true \
+    "$previous_container" "$rollback_image_reference" >/dev/null
+  previous_image_id="$(
+    docker image inspect --format '{{.Id}}' "$rollback_image_reference"
+  )"
+  [[ "$previous_image_id" =~ ^sha256:[0-9a-f]{64}$ ]]
+fi
 [[ "$(docker image inspect --format '{{.Id}}' "$rollback_image_reference")" == \
    "$previous_image_id" ]]
 python3 "$state_tool" write-intent \
