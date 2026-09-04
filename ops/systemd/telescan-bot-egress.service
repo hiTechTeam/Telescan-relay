@@ -1,0 +1,22 @@
+[Unit]
+Description=Telescan bot private Telegram egress proxy
+After=network-online.target wg-quick@wg0.service
+Wants=network-online.target
+Requires=wg-quick@wg0.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/tinyproxy -d -c /etc/tinyproxy/telescan-bot.conf
+ExecReload=/bin/kill -USR1 $MAINPID
+Restart=on-failure
+RestartSec=3
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectHome=yes
+NoNewPrivileges=yes
+KillMode=process
+KillSignal=SIGTERM
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

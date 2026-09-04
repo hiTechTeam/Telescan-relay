@@ -31,6 +31,16 @@ addresses.
 
 Secrets, WireGuard private keys, certificates, and `.env` are never committed.
 
+The host also provides a dedicated Telegram HTTP CONNECT proxy for the
+production bot. It listens only on the private WireGuard address
+`10.77.0.2:8889`, accepts only the Moscow peer `10.77.0.1`, and permits only
+`api.telegram.org:443`. Install or reconcile it on the relay host with:
+
+```sh
+sudo ./ops/install-telegram-egress.sh \
+  --apply --confirm INSTALL_TELESCAN_BOT_EGRESS
+```
+
 ## Provisioning or recovery
 
 1. Install host packages with `sudo bash ops/install-host-dependencies.sh`.

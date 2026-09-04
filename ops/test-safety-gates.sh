@@ -15,6 +15,7 @@ expect_rejected() {
 expect_rejected deploy bash ops/deploy-with-rollback.sh
 expect_rejected release-supervisor bash ops/run-release-transaction.sh
 expect_rejected release-recovery-install bash ops/install-release-recovery.sh
+expect_rejected telegram-egress-install bash ops/install-telegram-egress.sh
 grep -q 'systemctl reset-failed' ops/install-release-recovery.sh
 expect_rejected ssh-apply bash ops/install-host-hardening.sh
 expect_rejected relay-check-argument bash ops/check-relay.sh --unexpected
@@ -71,6 +72,12 @@ grep -q 'enable --now telescan-relay-certbot-renew.timer' \
 grep -q 'is-enabled --quiet telescan-relay-certbot-renew.timer' \
   .github/workflows/deploy.yml
 grep -q 'requires inherited production lock FD 9' ops/deploy-with-rollback.sh
+grep -Fxq 'Listen 10.77.0.2' egress/tinyproxy-bot.conf
+grep -Fxq 'Allow 10.77.0.1' egress/tinyproxy-bot.conf
+grep -Fxq 'ConnectPort 443' egress/tinyproxy-bot.conf
+grep -Fxq '^api\.telegram\.org$' egress/telegram-filter
+grep -Fq 'from 10.77.0.1' ops/install-telegram-egress.sh
+grep -Fq 'to 10.77.0.2' ops/install-telegram-egress.sh
 grep -q 'find "$release_root" -name .env' ops/deploy-with-rollback.sh
 bash ops/test-release-transaction.sh >/dev/null
 bash ops/test-recovery-unit-lock.sh >/dev/null
